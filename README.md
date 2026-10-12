@@ -1,5 +1,7 @@
 # STM32F407 ile DHT11 okuma ve Bluetooth üzerinden telefona gönderme
 
+> [TECH-OHM](https://tech-ohm.com) açık kaynak projesi
+
 DHT11 sensöründen sıcaklık ve nem okuyup HC-05 Bluetooth modülü üzerinden telefona gönderen yazılım. DHT11 için hazır kütüphane kullanmadım, tek hat protokolünü mikrosaniye sayan bir timer ile elle okudum.
 
 ## Blok diyagram
@@ -60,4 +62,10 @@ MIT. `Drivers` klasöründeki STM32 HAL ve CMSIS dosyaları kendi lisanslarıyla
 
 ## Yazar
 
-Gömülü Sistem Mühendisi M. Eyüb Can, [TECH-OHM](https://tech-ohm.com)
+Gömülü Sistem Mühendisi M. Eyüb Can, [TECH-OHM](https://tech-ohm.com) kurucusu
+
+## TECH-OHM
+
+[TECH-OHM](https://tech-ohm.com) elektronik kart ve gömülü yazılım tasarlayan bir mühendislik firması. Fikirden seri üretime kadar tasarım işi alıyor, TECH-OHM Akademi'de 12 aylık gömülü sistem eğitimi ve şirketlere özel danışmanlık veriyor.
+
+Web: [tech-ohm.com](https://tech-ohm.com) · E-posta: info@tech-ohm.com
