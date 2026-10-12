@@ -1,71 +1,75 @@
-# STM32F407 ile DHT11 okuma ve Bluetooth üzerinden telefona gönderme
+# DHT11 to phone over Bluetooth, without a sensor library
 
-> [TECH-OHM](https://tech-ohm.com) açık kaynak projesi
+STM32F407 · bit-banged single-wire protocol · HC-05
 
-DHT11 sensöründen sıcaklık ve nem okuyup HC-05 Bluetooth modülü üzerinden telefona gönderen yazılım. DHT11 için hazır kütüphane kullanmadım, tek hat protokolünü mikrosaniye sayan bir timer ile elle okudum.
+![MCU](https://img.shields.io/badge/MCU-STM32F407VG-03234B?logo=stmicroelectronics&logoColor=white) ![IDE](https://img.shields.io/badge/IDE-STM32CubeIDE-2ea44f) ![License](https://img.shields.io/badge/license-MIT-blue) [![TECH-OHM](https://img.shields.io/badge/by-TECH--OHM-FFD400)](https://tech-ohm.com)
 
-## Blok diyagram
+**English** | [Türkçe](README.tr.md) · An open-source project by [TECH-OHM](https://tech-ohm.com)
+
+Firmware that reads temperature and humidity from a DHT11 and sends them to a phone through an HC-05 Bluetooth module. It uses no ready-made DHT11 library. The single-wire protocol is read by hand with a timer that counts microseconds.
+
+## Block diagram
 
 ```mermaid
 flowchart LR
-    DHT[DHT11] -- "PB4, tek hat" --- MCU[STM32F407]
-    TIM[TIM6, 1 MHz sayaç] --> MCU
+    DHT[DHT11] -- "PB4, single wire" --- MCU[STM32F407]
+    TIM[TIM6, 1 MHz counter] --> MCU
     MCU -- "USART3, 9600" --> BT[HC-05]
-    BT -. Bluetooth .-> TEL[Telefon uygulaması]
+    BT -. Bluetooth .-> TEL[Phone app]
 ```
 
-## Pinler
+## Pins
 
-| Kart pini | Bağlandığı yer | Açıklama |
+| MCU pin | Connects to | Notes |
 |---|---|---|
-| PB4 | DHT11 DATA | 4.7k ile 10k arası pull-up ister, modül kartlarında üzerinde var |
+| PB4 | DHT11 DATA | needs a 4.7k to 10k pull-up, breakout modules already have one |
 | PB10 | HC-05 RXD | USART3 TX, 9600 |
 | PB11 | HC-05 TXD | USART3 RX |
-| PB7 | LED | okuma sürerken yanar |
-| PB14 | LED | her döngüde durum değiştirir |
+| PB7 | LED | on while a read is in progress |
+| PB14 | LED | toggles on every loop |
 
-## DHT11 protokolü
+## The DHT11 protocol
 
-Sensörle tek bir hat üzerinden konuşuluyor, o yüzden pin çalışırken giriş ve çıkış arasında değiştiriliyor.
+The sensor talks over one wire, so the pin switches between output and input while running.
 
-1. İşlemci hattı 20 ms 0'da tutup bırakıyor. Bu başlatma işareti.
-2. Sensör 80 µs 0, ardından 80 µs 1 göndererek cevap veriyor.
-3. Sonra 40 bit geliyor. Her bit 50 µs 0 ile başlıyor, ardından gelen 1'in süresi bitin değerini veriyor: 26 ile 28 µs ise 0, 70 µs civarı ise 1.
-4. 40 bit beş bayta ayrılıyor: nem, nem ondalık, sıcaklık, sıcaklık ondalık, sağlama.
-5. Beşinci bayt ilk dördünün toplamına eşit değilse okuma atılıyor.
+1. The MCU holds the line low for 20 ms and releases it. That is the start signal.
+2. The sensor answers with 80 µs low and 80 µs high.
+3. Then 40 bits follow. Each bit starts with 50 µs low, and the length of the high that follows gives the value: 26 to 28 µs is a 0, about 70 µs is a 1.
+4. The 40 bits form five bytes: humidity, humidity decimal, temperature, temperature decimal, checksum.
+5. If the fifth byte is not the sum of the first four, the reading is dropped.
 
-Süreleri ölçmek için TIM6 mikrosaniyede bir sayacak şekilde ayarlı. `dht_wait_while()` hat aynı seviyede kaldığı sürece bekliyor ve geçen süreyi döndürüyor. 500 µs içinde seviye değişmezse sensör yok sayılıyor, böylece sensör çıkarıldığında program takılmıyor.
+TIM6 counts once per microsecond to time all this. `dht_wait_while()` waits as long as the line stays at a given level and returns the elapsed time. If the level does not change within 500 µs the sensor is treated as missing, so the program does not hang when the sensor is unplugged.
 
-## Telefona giden veri
+## Data sent to the phone
 
-Saniyede bir, metin olarak:
+Once a second, as text:
 
 ```
-nem|sıcaklık
+humidity|temperature
 ```
 
-Örnek: `45|24`. Okuma başarısızsa `DHT Read Error!!` gidiyor.
+Example: `45|24`. On a failed read it sends `DHT Read Error!!`.
 
-Telefon tarafında herhangi bir Bluetooth seri terminal uygulamasıyla görebilirsin. Kendi uygulamanı yazıyorsan satırı `|` işaretinden bölmen yeterli.
+Any Bluetooth serial terminal app shows it. If you write your own app, split the line at the `|` character.
 
-## Derleme
+## Build
 
-STM32CubeIDE'de `File > Import > Existing Projects into Workspace` ile klasörü seç. Saat dahili osilatörden 84 MHz.
+In STM32CubeIDE use `File > Import > Existing Projects into Workspace` and select this folder. The clock is 84 MHz from the internal oscillator.
 
-## Durum
+## Status
 
-Bit okuma ve sağlama kontrolünü düzenledikten sonra sensörle yeniden denemedim.
+I reworked the bit decoding and the checksum test and have not re-tested with a sensor since.
 
-## Lisans
+## License
 
-MIT. `Drivers` klasöründeki STM32 HAL ve CMSIS dosyaları kendi lisanslarıyla gelir.
+MIT. The STM32 HAL and CMSIS files under `Drivers` keep their own licenses.
 
-## Yazar
+## Author
 
-Gömülü Sistem Mühendisi M. Eyüb Can, [TECH-OHM](https://tech-ohm.com) kurucusu
+M. Eyüb Can, embedded systems engineer and founder of [TECH-OHM](https://tech-ohm.com)
 
-## TECH-OHM
+## About TECH-OHM
 
-[TECH-OHM](https://tech-ohm.com) elektronik kart ve gömülü yazılım tasarlayan bir mühendislik firması. Fikirden seri üretime kadar tasarım işi alıyor, TECH-OHM Akademi'de 12 aylık gömülü sistem eğitimi ve şirketlere özel danışmanlık veriyor.
+[TECH-OHM](https://tech-ohm.com) designs electronic boards and embedded software, from the first schematic to series production. We also run a 12-month embedded systems training program and consult for engineering teams.
 
-Web: [tech-ohm.com](https://tech-ohm.com) · E-posta: info@tech-ohm.com
+Web: [tech-ohm.com](https://tech-ohm.com) · Email: info@tech-ohm.com
