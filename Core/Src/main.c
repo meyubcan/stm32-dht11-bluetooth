@@ -46,7 +46,7 @@ TIM_HandleTypeDef htim6;
 UART_HandleTypeDef huart3;
 
 /* USER CODE BEGIN PV */
-uint8_t dhtVal[2];      /* [0] sicaklik (C), [1] nem (%) */
+uint8_t dhtVal[2];      /* [0] temperature (C), [1] humidity (%) */
 char    sendData[32];
 /* USER CODE END PV */
 
@@ -61,12 +61,12 @@ static void MX_USART3_UART_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-#define DHT_TIMEOUT_US   500U   /* hat bu kadar surede degismezse sensor yok sayilir */
-#define DHT_BIT_SPLIT_US 45U    /* 26-28 us "0", yaklasik 70 us "1" */
+#define DHT_TIMEOUT_US   500U   /* if the line does not change within this time, there is no sensor */
+#define DHT_BIT_SPLIT_US 45U    /* 26-28 us is a "0", about 70 us is a "1" */
 
 typedef enum { DHT_PIN_INPUT = 0, DHT_PIN_OUTPUT } dht_pin_mode_t;
 
-/* DHT11 tek hat kullandigi icin pin calisirken giris ve cikis arasinda degisir */
+/* DHT11 uses a single wire, so the pin switches between input and output */
 static void dht_set_pin_mode(dht_pin_mode_t mode)
 {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
@@ -78,8 +78,8 @@ static void dht_set_pin_mode(dht_pin_mode_t mode)
   HAL_GPIO_Init(DHT11_GPIO_Port, &GPIO_InitStruct);
 }
 
-/* Hat verilen seviyede kaldigi surece bekler, gecen sureyi mikrosaniye olarak
- * dondurur. Zaman asiminda 0 doner. TIM6 1 MHz sayiyor. */
+/* Waits while the line stays at the given level and returns the elapsed time
+ * in microseconds. Returns 0 on timeout. TIM6 counts at 1 MHz. */
 static uint16_t dht_wait_while(GPIO_PinState level)
 {
   __HAL_TIM_SET_COUNTER(&htim6, 0);
@@ -90,25 +90,25 @@ static uint16_t dht_wait_while(GPIO_PinState level)
   return us ? us : 1U;
 }
 
-/* Sensorden 40 bit okur. Basariliysa 1 doner, pData[0] sicaklik, pData[1] nem. */
+/* Reads 40 bits. Returns 1 on success, pData[0] temperature, pData[1] humidity. */
 uint8_t readDHT11(uint8_t *pData)
 {
   uint8_t bytes[5] = {0};
 
-  /* Baslatma: hatti en az 18 ms 0'da tut, sonra birak */
+  /* Start: hold the line low for at least 18 ms, then release it */
   dht_set_pin_mode(DHT_PIN_OUTPUT);
   HAL_GPIO_WritePin(DHT11_GPIO_Port, DHT11_Pin, GPIO_PIN_RESET);
   HAL_Delay(20);
   dht_set_pin_mode(DHT_PIN_INPUT);
 
-  /* Sensor cevabi: kisa bir 1, ardindan 80 us 0 ve 80 us 1 */
+  /* Sensor response: a short high, then 80 us low and 80 us high */
   if (!dht_wait_while(GPIO_PIN_SET))   return 0;
   if (!dht_wait_while(GPIO_PIN_RESET)) return 0;
   if (!dht_wait_while(GPIO_PIN_SET))   return 0;
 
   HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
 
-  /* Her bit 50 us 0 ile baslar, ardindan gelen 1'in suresi bitin degerini verir */
+  /* Every bit starts with 50 us low. The length of the high that follows is the bit value. */
   for (int i = 0; i < 40; i++) {
     if (!dht_wait_while(GPIO_PIN_RESET)) return 0;
     uint16_t high_us = dht_wait_while(GPIO_PIN_SET);
@@ -120,11 +120,11 @@ uint8_t readDHT11(uint8_t *pData)
 
   HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
 
-  /* Besinci bayt ilk dort baytin toplami olmali */
+  /* The fifth byte must be the sum of the first four */
   if ((uint8_t)(bytes[0] + bytes[1] + bytes[2] + bytes[3]) != bytes[4]) return 0;
 
-  pData[0] = bytes[2];   /* sicaklik, tam kisim */
-  pData[1] = bytes[0];   /* nem, tam kisim */
+  pData[0] = bytes[2];   /* temperature, integer part */
+  pData[1] = bytes[0];   /* humidity, integer part */
   return 1;
 }
 /* USER CODE END 0 */
@@ -160,7 +160,7 @@ int main(void)
   MX_TIM6_Init();
   MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
-  /* TIM6 saati 84 MHz, on bolucu 83 ile sayac tam 1 MHz olur (1 tik = 1 us) */
+  /* TIM6 clock is 84 MHz. Prescaler 83 makes the counter exactly 1 MHz (1 tick = 1 us) */
   __HAL_TIM_SET_PRESCALER(&htim6, 83);
   htim6.Instance->EGR = TIM_EGR_UG;
   HAL_TIM_Base_Start(&htim6);
@@ -177,7 +177,7 @@ int main(void)
 
     if (readDHT11(dhtVal) == 1)
     {
-      /* Telefon uygulamasi "nem|sicaklik" bicimini bekliyor */
+      /* The phone app expects "humidity|temperature" */
       uint16_t len = (uint16_t)sprintf(sendData, "%d|%d\n\r", dhtVal[1], dhtVal[0]);
       HAL_UART_Transmit(&huart3, (uint8_t *)sendData, len, 100);
     }
@@ -187,7 +187,7 @@ int main(void)
       HAL_UART_Transmit(&huart3, (uint8_t *)sendData, len, 100);
     }
 
-    /* DHT11 saniyede bir defadan sik okunamaz */
+    /* DHT11 cannot be read more than once a second */
     HAL_Delay(1000);
   }
   /* USER CODE END 3 */
